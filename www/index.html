@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html lang="en" class="dark" data-theme="black">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wolf Pack E-Reader</title>
+
+    <!-- PWA & Theme Integration -->
+    <meta name="theme-color" content="#000000">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <!-- Tailwind (compiled locally: npm run setup) -->
+    <link rel="stylesheet" href="assets/css/tailwind.css">
+
+    <!-- PDF.js Engine (local) -->
+    <script src="assets/libs/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'assets/libs/pdf.worker.min.js';
+    </script>
+    <!-- EPUB (zip) + DOCX engines (local) -->
+    <script src="assets/libs/jszip.min.js"></script>
+    <script src="assets/libs/mammoth.browser.min.js"></script>
+
+    <style>
+        :root {
+            --accent-color: #10b981;
+            --page-bg: #000000;
+            --page-fg: #f1f5f9;
+            --panel-bg: #18181b;
+            --bar-bg: rgba(0, 0, 0, 0.95);
+            --nav-bg: #09090b;
+            --bar-border: #27272a;
+        }
+        [data-theme="dark"] {
+            --page-bg: #0f172a;
+            --panel-bg: #1e293b;
+            --bar-bg: rgba(15, 23, 42, 0.95);
+            --nav-bg: #020617;
+            --bar-border: #1e293b;
+        }
+        [data-theme="light"] {
+            --page-bg: #f1f5f9;
+            --page-fg: #1e293b;
+            --panel-bg: #ffffff;
+            --bar-bg: rgba(255, 255, 255, 0.95);
+            --nav-bg: #e2e8f0;
+            --bar-border: #cbd5e1;
+        }
+
+        body { background-color: var(--page-bg); color: var(--page-fg); }
+        .panel-bg { background-color: var(--panel-bg); }
+        .app-header { background-color: var(--bar-bg); border-color: var(--bar-border); }
+        .app-nav { background-color: var(--nav-bg); border-color: var(--bar-border); }
+        .tab-btn.active { border-color: var(--accent-color); }
+
+        .accent-text { color: var(--accent-color) !important; }
+        .accent-bg { background-color: var(--accent-color) !important; }
+        .accent-border { border-color: var(--accent-color) !important; }
+        .on-art { color: #ffffff !important; background-color: rgba(0, 0, 0, 0.6) !important; }
+        input[type=range], input[type=checkbox] { accent-color: var(--accent-color); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* Local icon packs (assets/icons/*.svg from lucide / heroicons) painted with currentColor */
+        .ic {
+            display: inline-block; width: 1em; height: 1em; vertical-align: -0.125em; flex-shrink: 0;
+            background-color: currentColor;
+            -webkit-mask: var(--ic) no-repeat center / contain;
+            mask: var(--ic) no-repeat center / contain;
+        }
+
+        /* Light theme overrides */
+        [data-theme="light"] .bg-black,
+        [data-theme="light"] .bg-black\/40,
+        [data-theme="light"] .bg-black\/50 { background-color: #f1f5f9; }
+        [data-theme="light"] .bg-zinc-800 { background-color: #e2e8f0; }
+        [data-theme="light"] .bg-zinc-900,
+        [data-theme="light"] .bg-zinc-900\/40 { background-color: #f8fafc; }
+        [data-theme="light"] .hover\:bg-zinc-700:hover { background-color: #cbd5e1; }
+        [data-theme="light"] .border-zinc-800,
+        [data-theme="light"] .border-zinc-700 { border-color: #cbd5e1; }
+        [data-theme="light"] .text-white:not(.accent-bg):not(.bg-red-600),
+        [data-theme="light"] .text-zinc-100,
+        [data-theme="light"] .text-zinc-200,
+        [data-theme="light"] .text-zinc-300 { color: #1e293b; }
+        [data-theme="light"] .text-zinc-400,
+        [data-theme="light"] .text-zinc-500,
+        [data-theme="light"] .text-zinc-600 { color: #64748b; }
+        [data-theme="light"] .hover\:text-white:hover,
+        [data-theme="light"] .hover\:text-zinc-200:hover { color: #0f172a; }
+        [data-theme="light"] .accent-bg { color: #ffffff; }
+
+        .cover-aspect { aspect-ratio: 1 / 1.4; }
+
+        /* Reflowable reader (EPUB / MOBI / DOCX / DOC / TXT) */
+        .reflow { max-width: 42rem; margin: 0 auto; padding: 1.25rem 1.1rem 5rem; line-height: 1.75; overflow-wrap: anywhere; color: var(--page-fg); font-size: 16px; user-select: text; -webkit-user-select: text; }
+        .reflow.serif { font-family: Georgia, 'Times New Roman', serif; }
+        .reflow p { margin: 0 0 1em; }
+        .reflow h1, .reflow h2, .reflow h3, .reflow h4, .reflow h5, .reflow h6 { font-weight: 700; line-height: 1.3; margin: 1.4em 0 .6em; }
+        .reflow h1 { font-size: 1.6em; } .reflow h2 { font-size: 1.4em; } .reflow h3 { font-size: 1.2em; }
+        .reflow img, .reflow svg { max-width: 100%; height: auto; margin: 1em auto; display: block; }
+        .reflow a { color: var(--accent-color); text-decoration: underline; }
+        .reflow blockquote { border-left: 3px solid var(--accent-color); padding-left: 1em; margin: 0 0 1em; opacity: .85; }
+        .reflow ul { list-style: disc; margin: 0 0 1em 1.4em; }
+        .reflow ol { list-style: decimal; margin: 0 0 1em 1.4em; }
+        .reflow table { border-collapse: collapse; max-width: 100%; display: block; overflow-x: auto; margin-bottom: 1em; }
+        .reflow td, .reflow th { border: 1px solid var(--bar-border); padding: .3em .6em; }
+        .reflow pre { white-space: pre-wrap; }
+        .reflow hr { border-color: var(--bar-border); margin: 2em 0; }
+    </style>
+</head>
+<body id="appBody" class="min-h-screen flex flex-col font-sans transition-colors duration-200 select-none pb-20">
+
+    <!-- TOP HEADER -->
+    <header id="appHeader" class="app-header sticky top-0 z-30 backdrop-blur-md border-b px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+            <div class="w-9 h-9 rounded-full bg-emerald-500/20 border border-emerald-500 flex items-center justify-center accent-text">
+                <span data-ic="book-open" class="text-base"></span>
+            </div>
+            <div>
+                <h1 id="appTitleHeader" class="text-base font-bold tracking-tight leading-none text-emerald-400">WOLF PACK E-READER</h1>
+                <p class="text-[10px] text-zinc-400 font-medium">PDF · EPUB · MOBI · DOCX · DOC · TXT</p>
+            </div>
+        </div>
+        <div class="flex items-center space-x-2">
+            <button id="selectFolderBtn" aria-label="Open eBook folder" class="accent-bg hover:opacity-90 text-white text-xs font-semibold px-3 py-2 rounded-xl shadow-md transition flex items-center space-x-2">
+                <span data-ic="folder-open"></span>
+                <span id="folderBtnText" class="hidden sm:inline">Select eBook Folder</span>
+            </button>
+            <input type="file" id="fallbackFolderInput" aria-label="Choose a folder" multiple class="hidden" />
+
+            <button id="addFilesBtn" aria-label="Add book files" title="Add book files" class="p-2.5 rounded-xl text-zinc-300 hover:bg-zinc-800/50 transition">
+                <span data-ic="file-plus" class="text-lg"></span>
+            </button>
+            <input type="file" id="filePickerInput" aria-label="Choose book files" multiple accept=".pdf,.epub,.mobi,.prc,.azw,.docx,.doc,.txt" class="hidden" />
+
+            <button id="openSettingsBtn" aria-label="Open settings" class="p-2.5 rounded-xl text-zinc-300 hover:bg-zinc-800/50 transition">
+                <span data-ic="settings" class="text-lg"></span>
+            </button>
+        </div>
+    </header>
+
+    <!-- NAVIGATION TABS -->
+    <nav id="appNav" class="app-nav border-b px-4 pt-2">
+        <div class="flex space-x-1 sm:space-x-2 overflow-x-auto no-scrollbar max-w-4xl mx-auto" id="navTabs">
+            <button data-tab="library" class="tab-btn active px-4 py-2.5 text-xs font-semibold rounded-t-lg border-b-2 accent-text flex items-center space-x-2 whitespace-nowrap">
+                <span data-ic="library"></span> <span>All Books</span>
+            </button>
+            <button data-tab="reading" class="tab-btn px-4 py-2.5 text-xs font-medium rounded-t-lg text-zinc-400 hover:text-zinc-200 flex items-center space-x-2 whitespace-nowrap">
+                <span data-ic="book-open-text"></span> <span>Continue Reading</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- TOAST -->
+    <div id="toast" class="fixed top-20 left-1/2 -translate-x-1/2 z-[60] hidden px-4 py-2 rounded-xl bg-zinc-800 text-zinc-100 text-xs font-medium shadow-xl border border-zinc-700 max-w-[90vw] text-center"></div>
+
+    <!-- MAIN VIEW AREA -->
+    <main class="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6">
+
+        <!-- RELINK BANNER -->
+        <div id="relinkBanner" class="hidden mb-4 p-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 text-xs flex items-center justify-between gap-3">
+            <p class="text-amber-500 font-medium"><span data-ic="unlink" class="mr-1.5"></span> Library session restored. Re-select your eBook folder to re-enable full access.</p>
+            <button id="btnRelink" class="accent-bg text-white font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap">Open Folder</button>
+        </div>
+
+        <!-- SEARCH & VIEW CONTROLS TOOLBAR -->
+        <div id="toolbar" class="panel-bg mb-4 p-3 rounded-2xl border border-zinc-800 shadow-sm flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-2 flex-1 min-w-[200px]">
+                <div class="relative flex-1">
+                    <span data-ic="search" class="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-xs"></span>
+                    <input type="text" id="searchInput" aria-label="Search eBooks" placeholder="Search books by title..." class="w-full pl-9 pr-3 py-1.5 bg-black border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500">
+                </div>
+                <select id="typeFilter" aria-label="Filter by format" class="py-1.5 px-2 bg-black border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500">
+                    <option value="all">All formats</option>
+                    <option value="pdf">PDF</option>
+                    <option value="epub">EPUB</option>
+                    <option value="mobi">MOBI</option>
+                    <option value="docx">DOCX</option>
+                    <option value="doc">DOC</option>
+                    <option value="txt">TXT</option>
+                </select>
+            </div>
+
+            <div class="flex items-center space-x-2 text-xs">
+                <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-1 flex items-center space-x-1">
+                    <button id="btnViewGrid2" title="2-Wide Cover View" class="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-400 hover:text-white transition">
+                        <span data-ic="grid-2x2"></span>
+                    </button>
+                    <button id="btnViewGrid4" title="4-Wide Cover View" class="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-400 hover:text-white transition">
+                        <span data-ic="layout-grid"></span>
+                    </button>
+                    <button id="btnViewList" title="1-Line List View" class="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-400 hover:text-white transition">
+                        <span data-ic="list"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB CONTENT VIEWS -->
+        <section id="view-library" class="tab-view space-y-2">
+            <div id="booksContainer"></div>
+        </section>
+
+        <section id="view-reading" class="tab-view hidden space-y-3">
+            <div id="continueReadingContainer" class="space-y-3"></div>
+        </section>
+    </main>
+
+    <!-- FULLSCREEN READER MODAL -->
+    <div id="readerModal" class="fixed inset-0 z-50 bg-black flex flex-col hidden">
+        <div class="app-header border-b px-4 py-2.5 flex items-center justify-between text-xs">
+            <div class="flex items-center space-x-3 min-w-0">
+                <button id="btnCloseReader" aria-label="Close reader" class="p-2 rounded-xl text-zinc-300 hover:bg-zinc-800 transition">
+                    <span data-ic="arrow-left" class="text-sm"></span>
+                </button>
+                <div class="min-w-0">
+                    <h2 id="readerBookTitle" class="font-bold text-white truncate text-xs sm:text-sm">Book Title</h2>
+                    <p id="readerProgressText" class="text-[10px] text-zinc-400">Page 1 of 1 (0%)</p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-2">
+                <button id="btnZoomOut" title="Smaller" aria-label="Zoom out" class="p-2 rounded-xl text-zinc-300 hover:bg-zinc-800 transition">
+                    <span data-ic="zoom-out"></span>
+                </button>
+                <span id="zoomDisplay" class="font-mono text-[11px] text-zinc-400 min-w-[40px] text-center">100%</span>
+                <button id="btnZoomIn" title="Larger" aria-label="Zoom in" class="p-2 rounded-xl text-zinc-300 hover:bg-zinc-800 transition">
+                    <span data-ic="zoom-in"></span>
+                </button>
+            </div>
+        </div>
+
+        <!-- PDF canvas -->
+        <div class="flex-1 overflow-auto bg-zinc-950 flex p-4 select-none" id="canvasContainer">
+            <canvas id="pdfCanvas" class="shadow-2xl rounded-sm m-auto"></canvas>
+        </div>
+        <!-- Reflowable text -->
+        <div id="reflowView" class="flex-1 overflow-y-auto hidden" style="background: var(--page-bg);">
+            <article id="reflowContent" class="reflow"></article>
+        </div>
+
+        <div class="app-header border-t px-4 py-2.5 flex items-center justify-between gap-4">
+            <button id="btnPrevPage" class="accent-bg text-white px-3 py-1.5 rounded-xl font-semibold text-xs transition disabled:opacity-30 flex items-center gap-1">
+                <span data-ic="chevron-left"></span> Prev
+            </button>
+            <div class="flex items-center space-x-2 flex-1 max-w-xs">
+                <input type="range" id="pageSlider" aria-label="Position" min="1" value="1" max="1" class="w-full h-1 bg-zinc-800 rounded-lg">
+            </div>
+            <button id="btnNextPage" class="accent-bg text-white px-3 py-1.5 rounded-xl font-semibold text-xs transition disabled:opacity-30 flex items-center gap-1">
+                Next <span data-ic="chevron-right"></span>
+            </button>
+        </div>
+    </div>
+
+    <!-- FOOTER SIGNATURE -->
+    <div class="fixed bottom-2 left-0 right-0 z-10 text-center pointer-events-none">
+        <p class="text-[10px] font-mono tracking-widest text-zinc-600 uppercase">Made by REAPER-357</p>
+    </div>
+
+    <!-- SETTINGS MODAL -->
+    <div id="settingsModal" class="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+        <div class="panel-bg w-full max-w-sm rounded-3xl p-6 border border-zinc-800 shadow-2xl space-y-4 text-center relative max-h-[92vh] overflow-y-auto">
+            <button class="closeModalBtn absolute top-4 right-4 text-zinc-400 hover:text-white text-lg" aria-label="Close">
+                <span data-ic="x"></span>
+            </button>
+
+            <div class="w-16 h-16 bg-emerald-500/20 rounded-2xl border border-emerald-500/50 flex items-center justify-center mx-auto text-2xl accent-text">
+                <span data-ic="book-marked"></span>
+            </div>
+
+            <h3 class="text-base font-bold text-white">Wolf Pack Settings</h3>
+            <p class="text-xs text-zinc-400">Customize theme, accent color and reading font</p>
+
+            <div class="bg-black/50 p-3 rounded-2xl border border-zinc-800 space-y-2 text-left">
+                <span class="text-xs font-semibold text-zinc-300">App Theme</span>
+                <div class="grid grid-cols-3 gap-2 pt-1">
+                    <button onclick="setAppTheme('black')" class="py-1.5 px-2 rounded-xl text-xs font-medium bg-zinc-900 border border-zinc-700 text-white transition">Pure Black</button>
+                    <button onclick="setAppTheme('dark')" class="py-1.5 px-2 rounded-xl text-xs font-medium bg-zinc-800 border border-zinc-700 text-zinc-300 transition">Dark</button>
+                    <button onclick="setAppTheme('light')" class="py-1.5 px-2 rounded-xl text-xs font-medium bg-slate-200 border border-slate-300 text-slate-800 transition">Light</button>
+                </div>
+            </div>
+
+            <div class="bg-black/50 p-3 rounded-2xl border border-zinc-800 space-y-2 text-left">
+                <span class="text-xs font-semibold text-zinc-300">Reading Font (EPUB, MOBI, DOCX, TXT)</span>
+                <div class="grid grid-cols-2 gap-2 pt-1">
+                    <button onclick="setReadingFont('serif')" class="py-1.5 px-2 rounded-xl text-xs font-medium bg-zinc-900 border border-zinc-700 text-white transition" style="font-family: Georgia, serif;">Serif</button>
+                    <button onclick="setReadingFont('sans')" class="py-1.5 px-2 rounded-xl text-xs font-medium bg-zinc-900 border border-zinc-700 text-white transition">Sans</button>
+                </div>
+            </div>
+
+            <div class="bg-black/50 p-3 rounded-2xl border border-zinc-800 space-y-2 text-left">
+                <span class="text-xs font-semibold text-zinc-300">Accent Color</span>
+                <div class="flex items-center justify-around pt-2">
+                    <button aria-label="Green accent" onclick="setAccentColor('#10b981')" class="w-7 h-7 rounded-full bg-emerald-500 hover:scale-110 transition-transform shadow"></button>
+                    <button aria-label="Red accent" onclick="setAccentColor('#ef4444')" class="w-7 h-7 rounded-full bg-red-500 hover:scale-110 transition-transform shadow"></button>
+                    <button aria-label="Blue accent" onclick="setAccentColor('#3b82f6')" class="w-7 h-7 rounded-full bg-blue-500 hover:scale-110 transition-transform shadow"></button>
+                    <button aria-label="Purple accent" onclick="setAccentColor('#a855f7')" class="w-7 h-7 rounded-full bg-purple-500 hover:scale-110 transition-transform shadow"></button>
+                    <button aria-label="Amber accent" onclick="setAccentColor('#f59e0b')" class="w-7 h-7 rounded-full bg-amber-500 hover:scale-110 transition-transform shadow"></button>
+                </div>
+            </div>
+
+            <div class="bg-black/50 p-3 rounded-2xl border border-zinc-800 text-xs space-y-1 text-left">
+                <p class="font-bold text-zinc-300">Privacy Assurance</p>
+                <p class="text-[11px] text-zinc-400 leading-relaxed">
+                    Scans strictly inside chosen folders. All book processing happens locally in your browser. Book text is never sent anywhere and remote images inside books are blocked.
+                </p>
+            </div>
+
+            <div class="text-center pt-1">
+                <p class="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Designed by REAPER-357</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- APPLICATION LOGIC -->
+    <script>
+        /* ---------- Formats ---------- */
+        const EXT_TYPES = { pdf: 'pdf', epub: 'epub', mobi: 'mobi', prc: 'mobi', azw: 'mobi', docx: 'docx', doc: 'doc', txt: 'txt', text: 'txt' };
+        const TYPE_LABEL = { pdf: 'PDF', epub: 'EPUB', mobi: 'MOBI', docx: 'DOCX', doc: 'DOC', txt: 'TXT' };
+        function typeOf(name) {
+            const m = /\.([a-z0-9]+)$/i.exec(name || '');
+            return m ? (EXT_TYPES[m[1].toLowerCase()] || null) : null;
+        }
+        function stripExt(n) { return n.replace(/\.[a-z0-9]+$/i, ''); }
+
+        /* ---------- State ---------- */
+        let masterBooks = [];
+        let activeViewMode = localStorage.getItem('lr_view_mode') || 'grid-4';
+        let currentBook = null;
+        let pdfDoc = null;
+        let sections = [];            // reflowable books: [{html} | {load}]
+        let blobUrls = [];            // object URLs created for the open book
+        let currentPageNum = 1;
+        let totalPages = 0;
+        let zoomFactor = 1.0;         // PDF: 1.0 = fit width
+        let fontScale = parseFloat(localStorage.getItem('lr_font_scale')) || 1.0;
+        let renderToken = 0;
+        let pdfRenderTask = null;
+        let coverQueueRunning = false;
+
+        /* ---------- DOM ---------- */
+        const $ = id => document.getElementById(id);
+        const selectFolderBtn = $('selectFolderBtn');
+        const fallbackFolderInput = $('fallbackFolderInput');
+        fallbackFolderInput.setAttribute('webkitdirectory', '');
+        fallbackFolderInput.setAttribute('directory', '');
+        const addFilesBtn = $('addFilesBtn');
+        const filePickerInput = $('filePickerInput');
+        const searchInput = $('searchInput');
+        const typeFilter = $('typeFilter');
+        const toastEl = $('toast');
+        const relinkBanner = $('relinkBanner');
+        const btnViewGrid2 = $('btnViewGrid2');
+        const btnViewGrid4 = $('btnViewGrid4');
+        const btnViewList = $('btnViewList');
+        const readerModal = $('readerModal');
+        const btnCloseReader = $('btnCloseReader');
+        const readerBookTitle = $('readerBookTitle');
+        const readerProgressText = $('readerProgressText');
+        const canvasContainer = $('canvasContainer');
+        const pdfCanvas = $('pdfCanvas');
+        const reflowView = $('reflowView');
+        const reflowContent = $('reflowContent');
+        const pageSlider = $('pageSlider');
+        const btnPrevPage = $('btnPrevPage');
+        const btnNextPage = $('btnNextPage');
+        const btnZoomIn = $('btnZoomIn');
+        const btnZoomOut = $('btnZoomOut');
+        const zoomDisplay = $('zoomDisplay');
+
+        /* ---------- Helpers ---------- */
+        function safeParse(str, fallback) { try { return str ? JSON.parse(str) : fallback; } catch (e) { return fallback; } }
+        function escapeHtml(str) {
+            return String(str == null ? '' : str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+        const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+        // Local icons: assets/icons/<name>.svg (lucide / heroicons) painted via CSS mask
+        function ic(name, cls = '') { return `<span class="ic ${cls}" style="--ic:url('assets/icons/${name}.svg')"></span>`; }
+        function hydrateIcons(root = document) {
+            root.querySelectorAll('[data-ic]').forEach(el => {
+                el.classList.add('ic');
+                el.style.setProperty('--ic', `url('assets/icons/${el.dataset.ic}.svg')`);
+                el.removeAttribute('data-ic');
+            });
+        }
+
+        let toastTimer = null;
+        function showToast(msg) {
+            toastEl.textContent = msg;
+            toastEl.classList.remove('hidden');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => toastEl.classList.add('hidden'), 3200);
+        }
+
+        function makeBookId(file, path) {
+            const str = `${path || file.name}_${file.size}_${file.lastModified}`;
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) hash = ((hash << 5) - hash) + str.charCodeAt(i);
+            return 'bk_' + Math.abs(hash).toString(36);
+        }
+
+        function unitLabel(book) { return book.type === 'pdf' ? 'Page' : (book.type === 'epub' ? 'Chapter' : 'Part'); }
+        function metaLabel(book) {
+            if (!book.totalPages) return TYPE_LABEL[book.type] || 'Book';
+            const u = unitLabel(book);
+            return `${book.totalPages} ${u}${book.totalPages === 1 ? '' : 's'}`;
+        }
+        function bookPct(b) {
+            if (!b.totalPages) return 0;
+            const pos = b.type === 'pdf' ? b.lastPage : (b.lastPage - 1 + (b.lastScroll || 0));
+            return clamp(Math.round((pos / b.totalPages) * 100), 0, 100);
+        }
+
+        /* ---------- Initialization ---------- */
+        window.addEventListener('DOMContentLoaded', () => {
+            hydrateIcons();
+            initPreferences();
+            setupTabNavigation();
+            setupViewToggleButtons();
+
+            const saved = safeParse(localStorage.getItem('lr_saved_books'), []);
+            if (Array.isArray(saved) && saved.length) {
+                masterBooks = saved.map(b => ({
+                    id: b.id,
+                    name: b.name,
+                    path: b.path || '',
+                    type: b.type || 'pdf',
+                    coverData: b.coverData || null,
+                    lastPage: b.lastPage || 1,
+                    lastScroll: b.lastScroll || 0,
+                    lastOpened: b.lastOpened || 0,
+                    totalPages: b.totalPages || 0,
+                    file: null
+                }));
+            }
+            updateRelinkBanner();
+            renderCurrentView();
+        });
+
+        function updateRelinkBanner() {
+            const needsRelink = masterBooks.length > 0 && !masterBooks.some(b => b.file);
+            relinkBanner.classList.toggle('hidden', !needsRelink);
+        }
+
+        function persistBooks() {
+            const data = masterBooks.map(b => ({
+                id: b.id, name: b.name, path: b.path, type: b.type, coverData: b.coverData,
+                lastPage: b.lastPage, lastScroll: b.lastScroll || 0, lastOpened: b.lastOpened || 0, totalPages: b.totalPages
+            }));
+            try { localStorage.setItem('lr_saved_books', JSON.stringify(data)); } catch (e) { /* quota */ }
+        }
+
+        /* ---------- Preferences ---------- */
+        function setAccentColor(hex) {
+            localStorage.setItem('lt_accent_color', hex);
+            document.documentElement.style.setProperty('--accent-color', hex);
+            $('appTitleHeader').style.color = hex;
+        }
+        function setAppTheme(theme) {
+            if (!['black', 'dark', 'light'].includes(theme)) theme = 'black';
+            localStorage.setItem('lt_app_theme', theme);
+            document.documentElement.setAttribute('data-theme', theme);
+            document.documentElement.classList.toggle('dark', theme !== 'light');
+            const meta = document.querySelector('meta[name="theme-color"]');
+            if (meta) meta.setAttribute('content', { black: '#000000', dark: '#0f172a', light: '#f1f5f9' }[theme]);
+        }
+        function setReadingFont(f) {
+            localStorage.setItem('lr_font_family', f);
+            applyReflowStyle();
+        }
+        function applyReflowStyle() {
+            reflowContent.style.fontSize = (16 * fontScale) + 'px';
+            reflowContent.classList.toggle('serif', (localStorage.getItem('lr_font_family') || 'serif') === 'serif');
+            if (currentBook && currentBook.type !== 'pdf') zoomDisplay.innerText = `${Math.round(fontScale * 100)}%`;
+        }
+        function initPreferences() {
+            setAccentColor(localStorage.getItem('lt_accent_color') || '#10b981');
+            setAppTheme(localStorage.getItem('lt_app_theme') || 'black');
+            applyReflowStyle();
+        }
+
+        /* ---------- Tabs / filters ---------- */
+        function setupTabNavigation() {
+            const tabs = document.querySelectorAll('#navTabs button');
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    tabs.forEach(t => {
+                        t.classList.remove('active', 'border-b-2', 'accent-text', 'font-semibold');
+                        t.classList.add('text-zinc-400', 'font-medium');
+                    });
+                    tab.classList.add('active', 'border-b-2', 'accent-text', 'font-semibold');
+                    tab.classList.remove('text-zinc-400', 'font-medium');
+                    const target = tab.getAttribute('data-tab');
+                    document.querySelectorAll('.tab-view').forEach(v => v.classList.add('hidden'));
+                    $(`view-${target}`).classList.remove('hidden');
+                    renderCurrentView();
+                });
+            });
+            searchInput.addEventListener('input', renderCurrentView);
+            typeFilter.addEventListener('change', renderCurrentView);
+        }
+        function getActiveTab() {
+            const active = document.querySelector('#navTabs button.active');
+            return active ? active.getAttribute('data-tab') : 'library';
+        }
+        function matchesFilters(b, q) {
+            return b.name.toLowerCase().includes(q) && (typeFilter.value === 'all' || b.type === typeFilter.value);
+        }
+
+        /* ---------- View Mode ---------- */
+        function setupViewToggleButtons() {
+            btnViewGrid2.addEventListener('click', () => setViewMode('grid-2'));
+            btnViewGrid4.addEventListener('click', () => setViewMode('grid-4'));
+            btnViewList.addEventListener('click', () => setViewMode('list'));
+            updateViewToggleState();
+        }
+        function setViewMode(mode) {
+            activeViewMode = mode;
+            localStorage.setItem('lr_view_mode', mode);
+            updateViewToggleState();
+            renderCurrentView();
+        }
+        function updateViewToggleState() {
+            [btnViewGrid2, btnViewGrid4, btnViewList].forEach(btn => {
+                btn.classList.remove('accent-bg', 'text-white');
+                btn.classList.add('text-zinc-400');
+            });
+            const active = { 'grid-2': btnViewGrid2, 'grid-4': btnViewGrid4, 'list': btnViewList }[activeViewMode];
+            if (active) active.classList.add('accent-bg', 'text-white');
+        }
+
+        /* ---------- Folder & File Scanning ---------- */
+        selectFolderBtn.addEventListener('click', openFolder);
+        $('btnRelink').addEventListener('click', openFolder);
+        addFilesBtn.addEventListener('click', () => filePickerInput.click());
+
+        async function openFolder() {
+            if ('showDirectoryPicker' in window) {
+                try {
+                    const dirHandle = await window.showDirectoryPicker();
+                    $('folderBtnText').innerText = dirHandle.name;
+                    showToast('Scanning eBook folder...');
+                    const entries = await scanDirectory(dirHandle);
+                    ingestBooks(entries, 'replace');
+                } catch (err) {
+                    if (err.name !== 'AbortError') fallbackFolderInput.click();
+                }
+            } else {
+                fallbackFolderInput.click();
+            }
+        }
+
+        fallbackFolderInput.addEventListener('change', (e) => {
+            const entries = Array.from(e.target.files).filter(f => typeOf(f.name)).map(f => ({ file: f, path: f.webkitRelativePath || f.name }));
+            ingestBooks(entries, 'replace');
+            e.target.value = '';
+        });
+        filePickerInput.addEventListener('change', (e) => {
+            const entries = Array.from(e.target.files).filter(f => typeOf(f.name)).map(f => ({ file: f, path: f.name }));
+            ingestBooks(entries, 'merge');
+            e.target.value = '';
+        });
+
+        async function scanDirectory(dirHandle, prefix = '', out = []) {
+            for await (const [name, handle] of dirHandle.entries()) {
+                if (handle.kind === 'file' && typeOf(name)) {
+                    out.push({ file: await handle.getFile(), path: prefix + name });
+                } else if (handle.kind === 'directory') {
+                    await scanDirectory(handle, prefix + name + '/', out);
+                }
+            }
+            return out;
+        }
+
+        function ingestBooks(entries, mode) {
+            if (!entries.length) { showToast('No supported books found (PDF, EPUB, MOBI, DOCX, DOC, TXT).'); return; }
+
+            const previous = new Map(masterBooks.map(b => [b.id, b]));
+            const built = entries.map(e => {
+                const id = makeBookId(e.file, e.path);
+                const prev = previous.get(id);
+                return {
+                    id,
+                    name: stripExt(e.file.name),
+                    path: e.path,
+                    type: typeOf(e.file.name),
+                    coverData: prev ? prev.coverData : null,
+                    lastPage: prev ? prev.lastPage : 1,
+                    lastScroll: prev ? (prev.lastScroll || 0) : 0,
+                    lastOpened: prev ? (prev.lastOpened || 0) : 0,
+                    totalPages: prev ? prev.totalPages : 0,
+                    file: e.file
+                };
+            });
+
+            if (mode === 'merge') {
+                const ids = new Set(built.map(b => b.id));
+                masterBooks = [...masterBooks.filter(b => !ids.has(b.id)), ...built];
+            } else {
+                masterBooks = built;
+            }
+            masterBooks.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+
+            persistBooks();
+            updateRelinkBanner();
+            renderCurrentView();
+            showToast(`${built.length} book(s) loaded into library.`);
+            queueCoverGenerations();
+        }
+
+        /* ---------- Covers ---------- */
+        async function blobToCover(blob) {
+            const url = URL.createObjectURL(blob);
+            try {
+                const img = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = url; });
+                const w = 240, h = Math.round(img.height * w / img.width);
+                const c = document.createElement('canvas');
+                c.width = w; c.height = h;
+                c.getContext('2d').drawImage(img, 0, 0, w, h);
+                return c.toDataURL('image/jpeg', 0.8);
+            } finally { URL.revokeObjectURL(url); }
+        }
+
+        async function queueCoverGenerations() {
+            if (coverQueueRunning) return;
+            coverQueueRunning = true;
+            try {
+                for (const book of masterBooks) {
+                    if (book.coverData || !book.file || book._tried) continue;
+                    book._tried = true;
+                    try {
+                        if (book.type === 'pdf') {
+                            const ab = await book.file.arrayBuffer();
+                            const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+                            book.totalPages = pdf.numPages;
+                            const page = await pdf.getPage(1);
+                            const viewport = page.getViewport({ scale: 0.4 });
+                            const canvas = document.createElement('canvas');
+                            canvas.width = viewport.width; canvas.height = viewport.height;
+                            await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+                            book.coverData = canvas.toDataURL('image/jpeg', 0.8);
+                            pdf.destroy();
+                        } else if (book.type === 'epub') {
+                            const p = await parseEpub(book.file);
+                            book.totalPages = p.sections.length;
+                            if (p.coverBlob) book.coverData = await blobToCover(p.coverBlob);
+                        } else { continue; }
+                        persistBooks();
+                        renderCurrentView();
+                    } catch (e) { console.error('Cover error:', book.name, e); }
+                }
+            } finally { coverQueueRunning = false; }
+        }
+
+        /* ---------- Library rendering ---------- */
+        function renderCurrentView() {
+            const q = searchInput.value.toLowerCase().trim();
+            if (getActiveTab() === 'library') renderLibraryView(q); else renderContinueReadingView(q);
+            hydrateIcons();
+        }
+
+        function coverInner(book, big) {
+            if (book.coverData) return `<img src="${book.coverData}" class="w-full h-full object-cover" alt="">`;
+            return `<div class="w-full h-full flex flex-col items-center justify-center gap-2 text-zinc-500 ${big ? 'text-3xl' : 'text-base'}">${ic('book')}<span class="text-[10px] font-mono font-bold tracking-widest">${TYPE_LABEL[book.type] || ''}</span></div>`;
+        }
+
+        function renderLibraryView(filter = '') {
+            const container = $('booksContainer');
+            container.innerHTML = '';
+            container.className = '';
+
+            if (!masterBooks.length) {
+                container.innerHTML = `
+                    <div class="text-center py-16 bg-zinc-900/40 rounded-3xl border border-dashed border-zinc-800 p-6">
+                        <div class="w-16 h-16 bg-zinc-900 rounded-full flex items-center justify-center mx-auto mb-4 text-zinc-500 text-2xl">${ic('folder-open')}</div>
+                        <h3 class="text-base font-bold text-zinc-200">No eBooks Scan Target Selected</h3>
+                        <p class="text-xs text-zinc-400 max-w-sm mx-auto mt-1 mb-5">Pick your eBook folder to scan PDF, EPUB, MOBI, DOCX, DOC and TXT files, or add individual files with the file button above.</p>
+                        <button onclick="document.getElementById('selectFolderBtn').click()" class="accent-bg hover:opacity-90 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-md transition">Select eBook Directory</button>
+                    </div>`;
+                return;
+            }
+
+            const books = masterBooks.filter(b => matchesFilters(b, filter));
+            if (!books.length) {
+                container.innerHTML = `<div class="text-center py-12 text-zinc-500 text-xs">No matching books found.</div>`;
+                return;
+            }
+
+            if (activeViewMode === 'grid-2') {
+                container.className = 'grid grid-cols-2 gap-4';
+                books.forEach(b => container.appendChild(createGridBookCard(b)));
+            } else if (activeViewMode === 'grid-4') {
+                container.className = 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4';
+                books.forEach(b => container.appendChild(createGridBookCard(b)));
+            } else {
+                container.className = 'space-y-1.5';
+                books.forEach(b => container.appendChild(createListBookRow(b)));
+            }
+        }
+
+        function createGridBookCard(book) {
+            const card = document.createElement('div');
+            card.className = `panel-bg rounded-2xl border border-zinc-800 overflow-hidden transition cursor-pointer hover:border-emerald-500 flex flex-col justify-between ${!book.file ? 'opacity-60' : ''}`;
+            card.innerHTML = `
+                <div class="relative cover-aspect bg-black/40 overflow-hidden">
+                    ${coverInner(book, true)}
+                    <span class="on-art absolute top-2 left-2 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded">${TYPE_LABEL[book.type] || ''}</span>
+                    <div class="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-2 text-right">
+                        <span class="text-[10px] font-mono accent-text font-bold">${bookPct(book)}%</span>
+                    </div>
+                </div>
+                <div class="p-3 min-w-0">
+                    <h3 class="text-xs font-bold truncate text-zinc-100">${escapeHtml(book.name)}</h3>
+                    <p class="text-[10px] text-zinc-400 mt-0.5 truncate">${metaLabel(book)}</p>
+                </div>`;
+            card.addEventListener('click', () => openBook(book));
+            return card;
+        }
+
+        function createListBookRow(book) {
+            const row = document.createElement('div');
+            row.className = `panel-bg p-3 rounded-xl border border-zinc-800 transition flex items-center justify-between space-x-3 cursor-pointer hover:border-emerald-500 ${!book.file ? 'opacity-60' : ''}`;
+            row.innerHTML = `
+                <div class="flex items-center space-x-3 min-w-0 flex-1">
+                    <div class="w-10 h-10 rounded-lg bg-zinc-800 overflow-hidden flex-shrink-0">${coverInner(book, false)}</div>
+                    <div class="min-w-0 flex-1">
+                        <p class="text-xs font-bold truncate text-zinc-100">${escapeHtml(book.name)}</p>
+                        <p class="text-[11px] text-zinc-400 truncate">${TYPE_LABEL[book.type] || ''} • ${metaLabel(book)} • ${unitLabel(book)} ${book.lastPage}</p>
+                    </div>
+                </div>
+                <div class="text-right flex-shrink-0"><span class="text-xs font-mono font-semibold accent-text">${bookPct(book)}%</span></div>`;
+            row.addEventListener('click', () => openBook(book));
+            return row;
+        }
+
+        function renderContinueReadingView(filter = '') {
+            const container = $('continueReadingContainer');
+            container.innerHTML = '';
+
+            const started = masterBooks
+                .filter(b => (b.lastPage > 1 || b.lastScroll > 0.02) && matchesFilters(b, filter))
+                .sort((a, b) => (b.lastOpened || 0) - (a.lastOpened || 0));
+
+            if (!started.length) {
+                container.innerHTML = `<div class="text-center py-16 text-zinc-500 text-xs">No active books. Pick a book from the library to start reading!</div>`;
+                return;
+            }
+
+            started.forEach(book => {
+                const pct = bookPct(book);
+                const card = document.createElement('div');
+                card.className = 'panel-bg p-4 rounded-2xl border border-zinc-800 shadow-sm flex items-center justify-between space-x-4 cursor-pointer hover:border-emerald-500 transition';
+                card.innerHTML = `
+                    <div class="flex items-center space-x-4 min-w-0 flex-1">
+                        <div class="w-12 h-16 rounded-lg bg-zinc-800 overflow-hidden flex-shrink-0">${coverInner(book, false)}</div>
+                        <div class="min-w-0 flex-1">
+                            <h3 class="text-sm font-bold text-zinc-100 truncate">${escapeHtml(book.name)}</h3>
+                            <p class="text-xs text-zinc-400 mt-1">${unitLabel(book)} ${book.lastPage}${book.totalPages ? ' of ' + book.totalPages : ''} (${pct}%)</p>
+                            <div class="w-full bg-zinc-800 h-1.5 rounded-full mt-2 overflow-hidden"><div class="accent-bg h-full rounded-full" style="width: ${pct}%"></div></div>
+                        </div>
+                    </div>
+                    <button class="accent-bg text-white text-xs font-semibold px-3 py-2 rounded-xl shadow-md flex items-center space-x-1.5 flex-shrink-0">
+                        ${ic('book-open', 'text-[10px]')} <span>Resume</span>
+                    </button>`;
+                card.addEventListener('click', () => openBook(book));
+                container.appendChild(card);
+            });
+        }
+
+        /* =====================================================
+           PARSERS (reflowable formats)
+           ===================================================== */
+        const SAFE_URL = /^(blob:|data:image\/)/i;
+
+        // Strip anything that could run code or phone home; keep structure so the theme styles it.
+        function sanitizeEl(root) {
+            root.querySelectorAll('script,iframe,object,embed,link,style,meta,base,input,button,textarea,select,audio,video,source').forEach(n => n.remove());
+            root.querySelectorAll('*').forEach(el => {
+                for (const a of Array.from(el.attributes)) {
+                    const n = a.name.toLowerCase(), v = a.value;
+                    if (n.startsWith('on') || ['style', 'class', 'bgcolor', 'color', 'face'].includes(n)) { el.removeAttribute(a.name); continue; }
+                    if (n === 'href' || n === 'src' || n === 'xlink:href' || n === 'srcset') {
+                        const tag = el.tagName.toLowerCase();
+                        if (tag === 'a' && n === 'href') {
+                            if (/^(https?:|mailto:)/i.test(v)) { el.setAttribute('target', '_blank'); el.setAttribute('rel', 'noopener noreferrer'); }
+                            else el.removeAttribute(a.name);
+                        } else if (n === 'srcset' || !SAFE_URL.test(v)) {
+                            el.removeAttribute(a.name);
+                        }
+                    }
+                }
+            });
+            return root.innerHTML;
+        }
+
+        function chunkHtml(htmlStr, limit = 9000) {
+            const doc = new DOMParser().parseFromString(htmlStr, 'text/html');
+            sanitizeEl(doc.body);
+            const out = [];
+            let buf = '';
+            const flush = () => {
+                if (buf.replace(/<[^>]*>/g, '').trim() || /<img/i.test(buf)) out.push({ html: buf });
+                buf = '';
+            };
+            for (const node of doc.body.childNodes) {
+                if (node.nodeType === 1 && node.tagName === 'HR' && node.hasAttribute('data-split')) { if (buf.length > 3000) flush(); continue; }
+                if (node.nodeType === 1) buf += node.outerHTML;
+                else if (node.nodeType === 3) buf += escapeHtml(node.textContent);
+                if (buf.length >= limit) flush();
+            }
+            flush();
+            if (!out.length) out.push({ html: '<p>(No readable text found in this file.)</p>' });
+            return out;
+        }
+
+        function textToSections(text, limit = 6000) {
+            const paras = text.replace(/\r\n?/g, '\n').split(/\n{2,}/);
+            const out = [];
+            let buf = '', len = 0;
+            for (const p of paras) {
+                const t = p.trim();
+                if (!t) continue;
+                buf += `<p>${escapeHtml(t).replace(/\n/g, '<br>')}</p>`;
+                len += t.length;
+                if (len >= limit) { out.push({ html: buf }); buf = ''; len = 0; }
+            }
+            if (buf) out.push({ html: buf });
+            if (!out.length) out.push({ html: '<p>(This file is empty.)</p>' });
+            return out;
+        }
+
+        function decodeText(u8) {
+            if (u8[0] === 0xFF && u8[1] === 0xFE) return new TextDecoder('utf-16le').decode(u8.subarray(2));
+            if (u8[0] === 0xFE && u8[1] === 0xFF) return new TextDecoder('utf-16be').decode(u8.subarray(2));
+            try { return new TextDecoder('utf-8', { fatal: true }).decode(u8); }
+            catch (e) { return new TextDecoder('windows-1252').decode(u8); }
+        }
+
+        function mimeFromPath(p) {
+            const ext = (p.split('.').pop() || '').toLowerCase();
+            return { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', svg: 'image/svg+xml', webp: 'image/webp' }[ext] || 'application/octet-stream';
+        }
+
+        /* ----- EPUB ----- */
+        function resolvePath(dir, href) {
+            href = href.split('#')[0];
+            try { return decodeURIComponent(new URL(href, 'http://x/' + dir).pathname.slice(1)); }
+            catch (e) { return href; }
+        }
+
+        async function inlineEpubImages(doc, zip, dir) {
+            for (const img of doc.querySelectorAll('img,image')) {
+                const attr = ['src', 'xlink:href', 'href'].find(a => img.hasAttribute(a));
+                if (!attr) continue;
+                const href = img.getAttribute(attr);
+                if (!href || /^(data:|blob:|https?:)/i.test(href)) continue;
+                const p = resolvePath(dir, href);
+                const f = zip.file(p);
+                if (!f) continue;
+                const buf = await f.async('arraybuffer');
+                const url = URL.createObjectURL(new Blob([buf], { type: mimeFromPath(p) }));
+                blobUrls.push(url);
+                img.setAttribute(attr, url);
+            }
+        }
+
+        async function parseEpub(file) {
+            const zip = await JSZip.loadAsync(file);
+            const readText = async p => { const f = zip.file(p); return f ? f.async('string') : null; };
+            const parser = new DOMParser();
+
+            const container = await readText('META-INF/container.xml');
+            if (!container) throw new Error('Invalid EPUB (no container.xml).');
+            const opfPath = parser.parseFromString(container, 'application/xml').querySelector('rootfile').getAttribute('full-path');
+            const opf = parser.parseFromString(await readText(opfPath), 'application/xml');
+            const base = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/') + 1) : '';
+
+            const manifest = {};
+            opf.querySelectorAll('manifest > item').forEach(it => {
+                manifest[it.getAttribute('id')] = { href: it.getAttribute('href'), type: it.getAttribute('media-type') || '', props: it.getAttribute('properties') || '' };
+            });
+            const spine = Array.from(opf.querySelectorAll('spine > itemref')).map(r => manifest[r.getAttribute('idref')]).filter(Boolean);
+            if (!spine.length) throw new Error('This EPUB has no readable chapters.');
+
+            let coverItem = Object.values(manifest).find(m => /cover-image/.test(m.props));
+            if (!coverItem) {
+                const meta = opf.querySelector('meta[name="cover"]');
+                if (meta) coverItem = manifest[meta.getAttribute('content')];
+            }
+            let coverBlob = null;
+            if (coverItem && /^image\//.test(coverItem.type)) {
+                const f = zip.file(resolvePath(base, coverItem.href));
+                if (f) coverBlob = new Blob([await f.async('arraybuffer')], { type: coverItem.type });
+            }
+
+            const secs = spine.map(item => ({
+                load: async () => {
+                    const path = resolvePath(base, item.href);
+                    const f = zip.file(path);
+                    if (!f) return '';
+                    const doc = parser.parseFromString(await f.async('string'), 'text/html');
+                    const dir = path.includes('/') ? path.slice(0, path.lastIndexOf('/') + 1) : '';
+                    await inlineEpubImages(doc, zip, dir);
+                    return sanitizeEl(doc.body);
+                }
+            }));
+            return { sections: secs, coverBlob };
+        }
+
+        /* ----- DOCX / DOC ----- */
+        async function docxFromBuffer(ab) {
+            const res = await mammoth.convertToHtml({ arrayBuffer: ab });
+            return chunkHtml(res.value);
+        }
+
+        // Best-effort text pull from legacy Word 97-2003 binaries (no formatting/images).
+        function parseLegacyDoc(buf) {
+            const u8 = new Uint8Array(buf);
+            const good = s => {
+                if (s.length < 25) return false;
+                const letters = (s.match(/[A-Za-z\u00C0-\u00FF\s]/g) || []).length;
+                return letters / s.length >= 0.7;
+            };
+            // 8-bit runs
+            const asciiRuns = [];
+            let cur = '';
+            const endRun = () => { if (good(cur)) asciiRuns.push(cur); cur = ''; };
+            for (let i = 0; i < u8.length; i++) {
+                const b = u8[i];
+                if ((b >= 32 && b < 127) || b >= 0xA0) cur += String.fromCharCode(b);
+                else if (b === 13 || b === 10) cur += '\n';
+                else if (b === 7 || b === 9) cur += ' ';
+                else if (b === 1 || b === 8 || b === 0x13 || b === 0x14 || b === 0x15) { /* field/picture marks: skip */ }
+                else endRun();
+            }
+            endRun();
+            // UTF-16LE runs (any alignment)
+            const wideRuns = [];
+            cur = '';
+            for (let i = 0; i + 1 < u8.length;) {
+                const lo = u8[i], hi = u8[i + 1];
+                if (hi === 0 && ((lo >= 32 && lo < 127) || lo === 13 || lo === 10 || lo === 9 || lo === 7)) {
+                    cur += lo === 13 || lo === 10 ? '\n' : (lo === 7 || lo === 9 ? ' ' : String.fromCharCode(lo));
+                    i += 2;
+                } else {
+                    if (good(cur)) wideRuns.push(cur);
+                    cur = '';
+                    i += 1;
+                }
+            }
+            if (good(cur)) wideRuns.push(cur);
+            const a = asciiRuns.join('\n'), w = wideRuns.join('\n');
+            return textToSections(w.length > a.length ? w : a);
+        }
+
+        /* ----- MOBI / PRC / AZW ----- */
+        function palmDecompress(src) {
+            const out = [];
+            let i = 0;
+            while (i < src.length) {
+                const c = src[i++];
+                if (c === 0 || (c >= 9 && c <= 0x7F)) out.push(c);
+                else if (c >= 1 && c <= 8) { for (let k = 0; k < c && i < src.length; k++) out.push(src[i++]); }
+                else if (c >= 0xC0) { out.push(32, c ^ 0x80); }
+                else {
+                    const m = (c << 8) | src[i++];
+                    const dist = (m & 0x3FFF) >> 3, len = (m & 7) + 3;
+                    if (dist === 0 || dist > out.length) break;
+                    for (let k = 0; k < len; k++) out.push(out[out.length - dist]);
+                }
+            }
+            return Uint8Array.from(out);
+        }
+
+        function mobiTrailingBytes(data, flags) {
+            let num = 0, f = flags >> 1;
+            while (f) {
+                if (f & 1) {
+                    let p = data.length - num - 1, bit = 0, size = 0;
+                    while (p >= 0) {
+                        const v = data[p];
+                        size |= (v & 0x7F) << bit; bit += 7; p--;
+                        if ((v & 0x80) || bit >= 28) break;
+                    }
+                    num += size;
+                }
+                f >>= 1;
+            }
+            if (flags & 1) num += (data[data.length - num - 1] & 3) + 1;
+            return num;
+        }
+
+        function parseMobi(buf) {
+            const u8 = new Uint8Array(buf), dv = new DataView(buf);
+            if (u8.length < 100) throw new Error('Not a valid MOBI file.');
+            const n = dv.getUint16(76);
+            const offs = [];
+            for (let i = 0; i < n; i++) offs.push(dv.getUint32(78 + i * 8));
+            offs.push(u8.length);
+            const rec = i => u8.subarray(offs[i], offs[i + 1]);
+            const r0 = offs[0];
+
+            const comp = dv.getUint16(r0), textRecs = dv.getUint16(r0 + 8), crypt = dv.getUint16(r0 + 12);
+            if (crypt !== 0) throw new Error('This book is DRM-protected and cannot be opened.');
+            if (comp === 17480) throw new Error('This MOBI uses HUFF/CDIC compression, which is not supported.');
+            if (String.fromCharCode(...u8.subarray(r0 + 16, r0 + 20)) !== 'MOBI') throw new Error('Not a valid MOBI file.');
+            const hdrLen = dv.getUint32(r0 + 20);
+            const encoding = dv.getUint32(r0 + 28);
+            const firstImage = dv.getUint32(r0 + 108);
+            const exthFlag = dv.getUint32(r0 + 128);
+            const extra = hdrLen >= 228 ? dv.getUint16(r0 + 242) : 0;
+
+            const chunks = [];
+            let total = 0;
+            for (let i = 1; i <= textRecs && i < n; i++) {
+                let data = rec(i);
+                if (extra) data = data.subarray(0, Math.max(0, data.length - mobiTrailingBytes(data, extra)));
+                if (comp === 2) data = palmDecompress(data);
+                chunks.push(data); total += data.length;
+            }
+            const all = new Uint8Array(total);
+            let p = 0;
+            for (const c of chunks) { all.set(c, p); p += c.length; }
+            const html = new TextDecoder(encoding === 65001 ? 'utf-8' : 'windows-1252').decode(all);
+
+            const sniff = d => (d[0] === 0xFF && d[1] === 0xD8) ? 'image/jpeg' : (d[0] === 0x89 && d[1] === 0x50) ? 'image/png' : (d[0] === 0x47 && d[1] === 0x49) ? 'image/gif' : null;
+            const imageBlob = idx => {
+                const ri = firstImage + idx;
+                if (firstImage === 0xFFFFFFFF || ri < 0 || ri >= n) return null;
+                const d = rec(ri), m = sniff(d);
+                return m ? new Blob([d], { type: m }) : null;
+            };
+
+            let coverBlob = null;
+            if (exthFlag & 0x40) {
+                const ep = r0 + 16 + hdrLen;
+                if (String.fromCharCode(...u8.subarray(ep, ep + 4)) === 'EXTH') {
+                    const cnt = dv.getUint32(ep + 8);
+                    let q = ep + 12;
+                    for (let i = 0; i < cnt && q + 8 <= u8.length; i++) {
+                        const t = dv.getUint32(q), l = dv.getUint32(q + 4);
+                        if (t === 201 && l >= 12) coverBlob = imageBlob(dv.getUint32(q + 8));
+                        if (l < 8) break;
+                        q += l;
+                    }
+                }
+            }
+
+            const prepared = html
+                .replace(/<mbp:pagebreak\s*\/?>/gi, '<hr data-split="1">')
+                .replace(/<\/mbp:pagebreak>/gi, '')
+                .replace(/<img\b[^>]*?recindex\s*=\s*["']?(\d+)["']?[^>]*>/gi, (m, d) => {
+                    const b = imageBlob(parseInt(d, 10) - 1);
+                    if (!b) return '';
+                    const u = URL.createObjectURL(b);
+                    blobUrls.push(u);
+                    return `<img src="${u}">`;
+                });
+            return { sections: chunkHtml(prepared), coverBlob };
+        }
+
+        async function parseReflow(book) {
+            const f = book.file;
+            switch (book.type) {
+                case 'epub': return parseEpub(f);
+                case 'mobi': return parseMobi(await f.arrayBuffer());
+                case 'docx': return { sections: await docxFromBuffer(await f.arrayBuffer()) };
+                case 'doc': {
+                    const buf = await f.arrayBuffer();
+                    const head = new Uint8Array(buf, 0, 2);
+                    if (head[0] === 0x50 && head[1] === 0x4B) return { sections: await docxFromBuffer(buf) }; // really a .docx
+                    showToast('Legacy .doc: text-only preview. Save as .docx for full formatting.');
+                    return { sections: parseLegacyDoc(buf) };
+                }
+                case 'txt': return { sections: textToSections(decodeText(new Uint8Array(await f.arrayBuffer()))) };
+            }
+            throw new Error('Unsupported format.');
+        }
+
+        /* =====================================================
+           READER
+           ===================================================== */
+        async function getSectionHtml(i) {
+            const s = sections[i];
+            if (!s) return '';
+            if (s.html != null) return s.html;
+            return await s.load();
+        }
+
+        function releaseBook() {
+            renderToken++;
+            if (pdfRenderTask) { try { pdfRenderTask.cancel(); } catch (e) {} pdfRenderTask = null; }
+            if (pdfDoc) { try { pdfDoc.destroy(); } catch (e) {} }
+            pdfDoc = null;
+            sections = [];
+            blobUrls.forEach(u => URL.revokeObjectURL(u));
+            blobUrls = [];
+            reflowContent.innerHTML = '';
+        }
+
+        async function openBook(book) {
+            if (!book.file) { showToast('Re-select your eBook folder to read this book.'); return; }
+
+            releaseBook();
+            currentBook = book;
+            book.lastOpened = Date.now();
+            readerBookTitle.innerText = book.name;
+            currentPageNum = book.lastPage || 1;
+            const isPdf = book.type === 'pdf';
+
+            try {
+                showToast('Opening book...');
+                if (isPdf) {
+                    zoomFactor = 1.0;
+                    const ab = await book.file.arrayBuffer();
+                    pdfDoc = await pdfjsLib.getDocument({ data: ab }).promise;
+                    totalPages = pdfDoc.numPages;
+                    zoomDisplay.innerText = '100%';
+                } else {
+                    const parsed = await parseReflow(book);
+                    sections = parsed.sections;
+                    totalPages = sections.length;
+                    if (parsed.coverBlob && !book.coverData) {
+                        try { book.coverData = await blobToCover(parsed.coverBlob); } catch (e) {}
+                    }
+                }
+                book.totalPages = totalPages;
+                currentPageNum = clamp(currentPageNum, 1, totalPages);
+                pageSlider.max = totalPages;
+                pageSlider.value = currentPageNum;
+
+                canvasContainer.classList.toggle('hidden', !isPdf);
+                reflowView.classList.toggle('hidden', isPdf);
+                applyReflowStyle();
+                readerModal.classList.remove('hidden');
+
+                if (isPdf) await renderPdfPage(currentPageNum);
+                else await renderSection(currentPageNum - 1, book.lastScroll || 0);
+            } catch (e) {
+                console.error(e);
+                releaseBook();
+                readerModal.classList.add('hidden');
+                showToast(e && e.message ? e.message : 'Error opening this book.');
+            }
+        }
+
+        function updateProgressText() {
+            if (!currentBook) return;
+            const pct = bookPct(currentBook);
+            readerProgressText.innerText = `${unitLabel(currentBook)} ${currentPageNum} of ${totalPages} (${pct}%)`;
+        }
+
+        function setProgress(num) {
+            currentPageNum = num;
+            currentBook.lastPage = num;
+            pageSlider.value = num;
+            btnPrevPage.disabled = num <= 1;
+            btnNextPage.disabled = num >= totalPages;
+            updateProgressText();
+            persistBooks();
+        }
+
+        async function renderPdfPage(num) {
+            if (!pdfDoc) return;
+            const doc = pdfDoc;
+            const token = ++renderToken;
+            if (pdfRenderTask) { try { pdfRenderTask.cancel(); } catch (e) {} }
+
+            let page;
+            try { page = await doc.getPage(num); } catch (e) { return; }
+            if (token !== renderToken || doc !== pdfDoc) return;
+
+            const base = page.getViewport({ scale: 1 });
+            const avail = Math.max(200, canvasContainer.clientWidth - 32);
+            const viewport = page.getViewport({ scale: (avail / base.width) * zoomFactor });
+            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+            pdfCanvas.width = Math.floor(viewport.width * dpr);
+            pdfCanvas.height = Math.floor(viewport.height * dpr);
+            pdfCanvas.style.width = viewport.width + 'px';
+            pdfCanvas.style.height = viewport.height + 'px';
+
+            pdfRenderTask = page.render({
+                canvasContext: pdfCanvas.getContext('2d'),
+                viewport,
+                transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : null
+            });
+            try { await pdfRenderTask.promise; }
+            catch (e) { if (e && e.name === 'RenderingCancelledException') return; console.error(e); }
+            if (token !== renderToken) return;
+
+            canvasContainer.scrollTop = 0;
+            setProgress(num);
+        }
+
+        async function renderSection(idx, frac = 0) {
+            const token = ++renderToken;
+            let html;
+            try { html = await getSectionHtml(idx); }
+            catch (e) { console.error(e); html = '<p>Could not load this section.</p>'; }
+            if (token !== renderToken) return;
+            reflowContent.innerHTML = html;
+            currentBook.lastScroll = frac;
+            setProgress(idx + 1);
+            requestAnimationFrame(() => {
+                reflowView.scrollTop = frac * Math.max(0, reflowView.scrollHeight - reflowView.clientHeight);
+            });
+        }
+
+        function goTo(num, frac = 0) {
+            if (!currentBook) return;
+            num = clamp(num, 1, totalPages);
+            if (currentBook.type === 'pdf') renderPdfPage(num);
+            else renderSection(num - 1, frac);
+        }
+
+        let scrollTimer = null;
+        reflowView.addEventListener('scroll', () => {
+            if (!currentBook || currentBook.type === 'pdf') return;
+            clearTimeout(scrollTimer);
+            scrollTimer = setTimeout(() => {
+                const max = reflowView.scrollHeight - reflowView.clientHeight;
+                currentBook.lastScroll = max > 0 ? reflowView.scrollTop / max : 0;
+                updateProgressText();
+                persistBooks();
+            }, 350);
+        });
+
+        btnPrevPage.addEventListener('click', () => { if (currentPageNum > 1) goTo(currentPageNum - 1); });
+        btnNextPage.addEventListener('click', () => { if (currentPageNum < totalPages) goTo(currentPageNum + 1); });
+        pageSlider.addEventListener('input', e => goTo(parseInt(e.target.value, 10)));
+
+        function applyZoom(dir) {
+            if (!currentBook) return;
+            if (currentBook.type === 'pdf') {
+                zoomFactor = clamp(Math.round((zoomFactor + dir * 0.25) * 100) / 100, 0.5, 4);
+                zoomDisplay.innerText = `${Math.round(zoomFactor * 100)}%`;
+                renderPdfPage(currentPageNum);
+            } else {
+                fontScale = clamp(Math.round((fontScale + dir * 0.1) * 100) / 100, 0.7, 2.2);
+                localStorage.setItem('lr_font_scale', String(fontScale));
+                applyReflowStyle();
+            }
+        }
+        btnZoomIn.addEventListener('click', () => applyZoom(1));
+        btnZoomOut.addEventListener('click', () => applyZoom(-1));
+
+        function closeReader() {
+            readerModal.classList.add('hidden');
+            persistBooks();
+            releaseBook();
+            currentBook = null;
+            renderCurrentView();
+        }
+        btnCloseReader.addEventListener('click', closeReader);
+
+        document.addEventListener('keydown', e => {
+            if (readerModal.classList.contains('hidden')) return;
+            if (e.key === 'ArrowRight') btnNextPage.click();
+            else if (e.key === 'ArrowLeft') btnPrevPage.click();
+            else if (e.key === 'Escape') closeReader();
+        });
+
+        let resizeTimer = null;
+        window.addEventListener('resize', () => {
+            if (!currentBook || currentBook.type !== 'pdf' || readerModal.classList.contains('hidden')) return;
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => renderPdfPage(currentPageNum), 200);
+        });
+
+        /* ---------- Settings Modal ---------- */
+        const settingsModal = $('settingsModal');
+        $('openSettingsBtn').addEventListener('click', () => settingsModal.classList.remove('hidden'));
+        document.querySelectorAll('.closeModalBtn').forEach(btn => {
+            btn.addEventListener('click', () => settingsModal.classList.add('hidden'));
+        });
+    </script>
+</body>
+</html>
