@@ -3,10 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wolf Pack E-Reader</title>
+    <title>Wolf Pack - E-Reading App</title>
 
     <!-- PWA & Theme Integration -->
     <meta name="theme-color" content="#000000">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/svg+xml" href="icon.svg">
+    <link rel="apple-touch-icon" href="icon-192.png">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
@@ -24,7 +27,7 @@
 
     <style>
         :root {
-            --accent-color: #10b981;
+            --accent-color: #3b82f6;
             --page-bg: #000000;
             --page-fg: #f1f5f9;
             --panel-bg: #18181b;
@@ -62,13 +65,7 @@
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-        /* Local icon packs (assets/icons/*.svg from lucide / heroicons) painted with currentColor */
-        .ic {
-            display: inline-block; width: 1em; height: 1em; vertical-align: -0.125em; flex-shrink: 0;
-            background-color: currentColor;
-            -webkit-mask: var(--ic) no-repeat center / contain;
-            mask: var(--ic) no-repeat center / contain;
-        }
+                .ic { display: inline-block; width: 1em; height: 1em; vertical-align: -0.125em; flex-shrink: 0; }
 
         /* Light theme overrides */
         [data-theme="light"] .bg-black,
@@ -116,11 +113,11 @@
     <header id="appHeader" class="app-header sticky top-0 z-30 backdrop-blur-md border-b px-4 py-3 flex items-center justify-between">
         <div class="flex items-center space-x-3">
             <div class="w-9 h-9 rounded-full bg-emerald-500/20 border border-emerald-500 flex items-center justify-center accent-text">
-                <span data-ic="book-open" class="text-base"></span>
+                <span data-ic="paw-print" class="text-base"></span>
             </div>
             <div>
-                <h1 id="appTitleHeader" class="text-base font-bold tracking-tight leading-none text-emerald-400">WOLF PACK E-READER</h1>
-                <p class="text-[10px] text-zinc-400 font-medium">PDF · EPUB · MOBI · DOCX · DOC · TXT</p>
+                <h1 id="appTitleHeader" class="text-base font-bold tracking-tight leading-none text-blue-400">WOLF PACK</h1>
+                <p class="text-[10px] text-zinc-400 font-medium">E-Reading · PDF · EPUB · MOBI · DOCX · DOC · TXT</p>
             </div>
         </div>
         <div class="flex items-center space-x-2">
@@ -267,7 +264,7 @@
             </button>
 
             <div class="w-16 h-16 bg-emerald-500/20 rounded-2xl border border-emerald-500/50 flex items-center justify-center mx-auto text-2xl accent-text">
-                <span data-ic="book-marked"></span>
+                <span data-ic="paw-print"></span>
             </div>
 
             <h3 class="text-base font-bold text-white">Wolf Pack Settings</h3>
@@ -377,12 +374,34 @@
         }
         const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
-        // Local icons: assets/icons/<name>.svg (lucide / heroicons) painted via CSS mask
-        function ic(name, cls = '') { return `<span class="ic ${cls}" style="--ic:url('assets/icons/${name}.svg')"></span>`; }
+        const ICONS = {
+            'arrow-left': '<path d="M19 12H5"/><path d="m12 19-7-7 7-7"/>',
+            'book': '<path d="M6 3h12a1 1 0 0 1 1 1v14H7a2 2 0 0 0-2 2V4a1 1 0 0 1 1-1z"/><path d="M5 20a2 2 0 0 0 2 1h12"/>',
+            'book-open': '<path d="M12 6v14"/><path d="M12 6c-1.5-1.5-4-2-8-2v14c4 0 6.5.5 8 2 1.5-1.5 4-2 8-2V4c-4 0-6.5.5-8 2z"/>',
+            'book-open-text': '<path d="M12 6v14"/><path d="M12 6c-1.5-1.5-4-2-8-2v14c4 0 6.5.5 8 2 1.5-1.5 4-2 8-2V4c-4 0-6.5.5-8 2z"/><path d="M6.5 8.5H9M6.5 12H9M15 8.5h2.5M15 12h2.5"/>',
+            'chevron-left': '<path d="m15 18-6-6 6-6"/>',
+            'chevron-right': '<path d="m9 18 6-6-6-6"/>',
+            'file-plus': '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 11v6M9 14h6"/>',
+            'folder-open': '<path d="M3 18V6a1 1 0 0 1 1-1h5l2 2h8a1 1 0 0 1 1 1v2"/><path d="m3 18 2.5-7a1 1 0 0 1 1-.7H21l-2.4 7.4a1 1 0 0 1-1 .7H4a1 1 0 0 1-1-.4z"/>',
+            'grid-2x2': '<rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/>',
+            'layout-grid': '<rect x="3" y="3" width="5" height="5" rx="1"/><rect x="9.5" y="3" width="5" height="5" rx="1"/><rect x="16" y="3" width="5" height="5" rx="1"/><rect x="3" y="9.5" width="5" height="5" rx="1"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><rect x="16" y="9.5" width="5" height="5" rx="1"/><rect x="3" y="16" width="5" height="5" rx="1"/><rect x="9.5" y="16" width="5" height="5" rx="1"/><rect x="16" y="16" width="5" height="5" rx="1"/>',
+            'library': '<path d="M4 4h4v16H4zM10 4h4v16h-4z"/><path d="m16 6 3.5-.9 3 14.4-3.5.9z"/>',
+            'list': '<path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/>',
+            'paw-print': '<circle cx="6.5" cy="10" r="1.8"/><circle cx="10" cy="5.5" r="1.8"/><circle cx="14" cy="5.5" r="1.8"/><circle cx="17.5" cy="10" r="1.8"/><path d="M12 12.5c-3 0-5.5 3-5.5 5.2 0 1.6 1.4 2.3 2.8 2.3 1 0 1.8-.4 2.7-.4s1.7.4 2.7.4c1.4 0 2.8-.7 2.8-2.3 0-2.2-2.5-5.2-5.5-5.2z"/>',
+            'search': '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+            'settings': '<circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7.5"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/>',
+            'unlink': '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/><path d="m3 3 18 18"/>',
+            'x': '<path d="M18 6 6 18M6 6l12 12"/>',
+            'zoom-in': '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M11 8v6M8 11h6"/>',
+            'zoom-out': '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M8 11h6"/>',
+        };
+        // Built-in inline SVG icons: always available, fully offline, colored by currentColor
+        function ic(name, cls = '') {
+            return `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
+        }
         function hydrateIcons(root = document) {
             root.querySelectorAll('[data-ic]').forEach(el => {
-                el.classList.add('ic');
-                el.style.setProperty('--ic', `url('assets/icons/${el.dataset.ic}.svg')`);
+                el.innerHTML = ic(el.dataset.ic);
                 el.removeAttribute('data-ic');
             });
         }
@@ -477,7 +496,7 @@
             if (currentBook && currentBook.type !== 'pdf') zoomDisplay.innerText = `${Math.round(fontScale * 100)}%`;
         }
         function initPreferences() {
-            setAccentColor(localStorage.getItem('lt_accent_color') || '#10b981');
+            setAccentColor(localStorage.getItem('lt_accent_color') || '#3b82f6');
             setAppTheme(localStorage.getItem('lt_app_theme') || 'black');
             applyReflowStyle();
         }
@@ -1277,6 +1296,13 @@
         document.querySelectorAll('.closeModalBtn').forEach(btn => {
             btn.addEventListener('click', () => settingsModal.classList.add('hidden'));
         });
+    </script>
+
+    <!-- Service worker (offline install) -->
+    <script>
+        if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+            window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+        }
     </script>
 </body>
 </html>
